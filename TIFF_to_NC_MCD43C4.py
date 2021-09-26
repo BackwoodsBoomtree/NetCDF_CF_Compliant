@@ -11,38 +11,43 @@
 import os
 from netCDF4 import Dataset,date2num
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from osgeo import gdal
 import numpy as np
 
-# Input arguments for 8-day data
-input_dir   = '/mnt/g/MCD43C4/tif/8-day/0.25/LSWI' # input folder contains TIFFs from all years
-output_dir  = '/mnt/g/MCD43C4/nc/8-day/0.25/LSWI'
+# Input arguments 
+input_dir   = '/mnt/g/MCD43C4/tif/Monthly/0.25'
+output_dir  = '/mnt/g/MCD43C4/nc/Monthly/0.25'
 output_name = 'MCD43C4.A'
-vi          = 'LSWI'
-time        = '8-day' # must be 'Daily', '8-day', or 'Monthly
+vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
+interval    = 'Monthly' # must be 'Daily', '8-day', or 'Monthly
 res         = '0.25'
 year_list   = list(range(2018, 2020 + 1)) # Start and end year
 
 
-def tiff_to_netcdf(input_dir, output_dir, output_name, vi, time, res, year):
+def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
     
     raster_list = sorted([os.path.join(input_dir, l) for l in os.listdir(input_dir) if l.endswith('.tif')]) # All rasters in input_dir
     
     # Check whether the specified path exists or not
+    output_dir = os.path.join(output_dir, vi)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-             
-        raster_list = raster_list
     
-    if len(raster_list) != 46 and year != 2000 and year != 2001: 
-        quit('ERROR: There should be 46 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
+    # Make sure there are enough files to package up (2000 and 2001 have short MODIS records)            
+    if interval == '8-day':
+        if len(raster_list) != 46 and year != 2000 and year != 2001: 
+            quit('ERROR: There should be 46 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
+    elif interval == 'Monthly':
+        if len(raster_list) != 12 and year != 2000 and year != 2001: 
+            quit('ERROR: There should be 12 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
 
     # Printing for visual quality control
     print('Packing up these ' + str(len(raster_list)) + ' rasters into the .nc file for the year ' + str(year) + ':')
     print("\n".join(raster_list))
 
     # Create NetCDF file
-    out_name = ".".join([output_name, str(year), vi, time, res, 'nc'])
+    out_name = ".".join([output_name, str(year), vi, interval, res, 'nc'])
     out_file    = os.path.join(output_dir, out_name)
     nco         = Dataset(out_file, 'w', clobber = True, format = "NETCDF4")
     
@@ -78,7 +83,10 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, time, res, year):
     time.standard_name = 'time'
     time.calendar      = 'gregorian'
     time.units         = 'days since %s-01-01' % str(year)
-    dates              = [datetime(year, 1, 1) + n * timedelta(days = 8) for n in range(0, 46)] # list of dates
+    if interval == '8-day':
+        dates              = [datetime(year, 1, 1) + n * timedelta(days = 8) for n in range(0, 46)] # list of dates
+    if interval == 'Monthly':
+        dates              = [datetime(year, 1, 1) + relativedelta(month = n) for n in range(1, 13)] # list of dates    
     
     # Lon
     lon               = nco.createVariable('lon', 'f4', ('lon',))
@@ -137,15 +145,15 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, time, res, year):
         for i in range(len(raster_list)+1):
             time[i] = date2num(dates[i], units = time.units, calendar = time.calendar) # netCDF4 function that translates datetime object into proper format for .nc
             if i == 22:
-                GPP[i, :, :] = dummy
+                var[i, :, :] = dummy
             elif i < 22:
                 layer = gdal.Open(raster_list[i])
                 array = layer.ReadAsArray()  # data
-                GPP[i, :, :] = array
+                var[i, :, :] = array
             elif i > 22:
                 layer = gdal.Open(raster_list[i - 1])
                 array = layer.ReadAsArray()  # data
-                GPP[i, :, :] = array
+                var[i, :, :] = array
         nco.close()
         print('I have created the file: %s\n' % out_file)                    
     
@@ -159,15 +167,17 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, time, res, year):
         nco.close()
         print('I have created the file: %s\n' % out_file)
 
-sub_dirs      = [f.path for f in os.scandir(input_dir) if f.is_dir()] # Get subdirectories of input_dir
-filtered_dirs = []
+for v in range(len(vi_list)):          
+    i_dir = os.path.join(input_dir, vi_list[v])
+    sub_dirs      = [f.path for f in os.scandir(i_dir) if f.is_dir()] # Get subdirectories of input_dir
+    filtered_dirs = []
 
-for i in range(len(year_list)): # filter dirs by the year list
-    if str(year_list[i]) in sub_dirs[i]:
-        filtered_dirs.append(sub_dirs[i])
-        
-for j in range(len(filtered_dirs)):
-    tiff_to_netcdf(filtered_dirs[j], output_dir, output_name, vi, time, res, year_list[j])
+    for i in range(len(year_list)): # filter dirs by the year list
+        if str(year_list[i]) in sub_dirs[i]:
+            filtered_dirs.append(sub_dirs[i]) 
+               
+    for j in range(len(filtered_dirs)):
+        tiff_to_netcdf(filtered_dirs[j], output_dir, output_name, vi_list[v], interval, res, year_list[j])
     
 
 
