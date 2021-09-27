@@ -8,6 +8,7 @@
 # Created:     September 25th, 2021
 #-------------------------------------------------------------------------------
 
+
 import os
 from netCDF4 import Dataset,date2num
 from datetime import datetime, timedelta
@@ -16,40 +17,17 @@ from osgeo import gdal
 import numpy as np
 
 # Input arguments 
-input_dir   = '/mnt/g/MCD43C4/tif/Monthly/0.25'
-output_dir  = '/mnt/g/MCD43C4/nc/Monthly/0.25'
+input_dir   = '/mnt/g/MCD43C4/tif/Daily/0.05'
+output_dir  = '/mnt/g/MCD43C4/nc/Daily/0.05'
 output_name = 'MCD43C4.A'
 vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
-interval    = 'Monthly' # must be 'Daily', '8-day', or 'Monthly
-res         = '0.25'
+interval    = 'Daily' # must be 'Daily', '8-day', or 'Monthly
+res         = '0.05'
 year_list   = list(range(2018, 2020 + 1)) # Start and end year
 
-
-def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
-    
-    raster_list = sorted([os.path.join(input_dir, l) for l in os.listdir(input_dir) if l.endswith('.tif')]) # All rasters in input_dir
-    
-    # Check whether the specified path exists or not
-    output_dir = os.path.join(output_dir, vi)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    
-    # Make sure there are enough files to package up (2000 and 2001 have short MODIS records)            
-    if interval == '8-day':
-        if len(raster_list) != 46 and year != 2000 and year != 2001: 
-            quit('ERROR: There should be 46 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
-    elif interval == 'Monthly':
-        if len(raster_list) != 12 and year != 2000 and year != 2001: 
-            quit('ERROR: There should be 12 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
-
-    # Printing for visual quality control
-    print('Packing up these ' + str(len(raster_list)) + ' rasters into the .nc file for the year ' + str(year) + ':')
-    print("\n".join(raster_list))
-
-    # Create NetCDF file
-    out_name = ".".join([output_name, str(year), vi, interval, res, 'nc'])
-    out_file    = os.path.join(output_dir, out_name)
-    nco         = Dataset(out_file, 'w', clobber = True, format = "NETCDF4")
+def create_nc_obj(output_name, interval, raster_list, year, vi):
+    # Create NetCDF file    
+    nco             = Dataset(output_name, 'w', clobber = True, format = "NETCDF4")
     
     # Meta-data
     nco.Conventions = 'CF-1.9'
@@ -68,10 +46,9 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
     ds         = gdal.Open(raster_list[0])
     a          = ds.ReadAsArray()
     nlat, nlon = np.shape(a)
-
-    b        = ds.GetGeoTransform()  # bbox, interval
-    lon_list = np.arange(nlon) * b[1] + b[0]
-    lat_list = np.arange(nlat) * b[5] + b[3]
+    b          = ds.GetGeoTransform()  # bbox, interval
+    lon_list   = np.arange(nlon) * b[1] + b[0]
+    lat_list   = np.arange(nlat) * b[5] + b[3]
 
     # Create dimensions, variables and attributes
     nco.createDimension('lon', nlon)
@@ -83,6 +60,8 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
     time.standard_name = 'time'
     time.calendar      = 'gregorian'
     time.units         = 'days since %s-01-01' % str(year)
+    if interval == 'Daily':
+        dates              = [datetime(year, 1, 1) + n * timedelta(days = 1) for n in range(len(raster_list))] # list of dates    
     if interval == '8-day':
         dates              = [datetime(year, 1, 1) + n * timedelta(days = 8) for n in range(0, 46)] # list of dates
     if interval == 'Monthly':
@@ -135,7 +114,7 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
             else:
                 var[i, :, :] = dummy
         nco.close()
-        print('I have created the file: %s\n' % out_file)
+        print('I have created the file: %s\n' % output_name)
 
     elif year == 2001:
         dummy             = gdal.Open(raster_list[0])
@@ -155,7 +134,7 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
                 array = layer.ReadAsArray()  # data
                 var[i, :, :] = array
         nco.close()
-        print('I have created the file: %s\n' % out_file)                    
+        print('I have created the file: %s\n' % output_name)                    
     
     else:
         # For all years after 2001. Step through each raster for the year, writing time and data to NetCDF
@@ -165,7 +144,75 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
             array = layer.ReadAsArray()  # data
             var[i, :, :] = array
         nco.close()
-        print('I have created the file: %s\n' % out_file)
+        print('I have created the file: %s\n' % output_name)    
+        
+
+def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
+    
+    raster_list = sorted([os.path.join(input_dir, l) for l in os.listdir(input_dir) if l.endswith('.tif')]) # All rasters in input_dir
+    
+    # Check whether the specified path exists or not
+    output_dir = os.path.join(output_dir, vi)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Make sure there are enough files to package up (2000 and 2001 have short MODIS records)
+    if interval == 'Daily':
+        if len(raster_list) != 365 and len(raster_list) != 366 and year != 2000 and year != 2001: 
+            quit('ERROR: There should be 365 or 365 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')                
+    elif interval == '8-day':
+        if len(raster_list) != 46 and year != 2000 and year != 2001: 
+            quit('ERROR: There should be 46 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')
+    elif interval == 'Monthly':
+        if len(raster_list) != 12 and year != 2000 and year != 2001: 
+            quit('ERROR: There should be 12 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')           
+
+    # Printing for visual quality control
+    print('Packing up these ' + str(len(raster_list)) + ' rasters into the .nc file for the year ' + str(year) + ' , starting with:')
+    print(raster_list[0])
+
+    # 8-day and Monthly TIFs are placed into a single nc file for the year,
+    # and daily tifs are placed into monthly nc files
+    if interval == '8-day' or interval == 'Monthly':
+        out_name    = ".".join([output_name, str(year), vi, interval, res, 'nc'])
+        out_file    = os.path.join(output_dir, out_name)
+        create_nc_obj(out_file, interval, raster_list, year, vi)
+        
+    elif interval == 'Daily':
+        doy = 0
+        for m in list(range(1, 13)):
+            if m == 1 or m == 3 or m ==5 or m == 7 or m == 8 or m == 10 or m == 12:
+                m_raster_list = raster_list[doy : (doy + 31)]
+                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                out_file      = os.path.join(output_dir, out_name)
+                doy           = doy + 31
+                print(m_raster_list[0], m_raster_list[-1])
+                create_nc_obj(out_file, interval, m_raster_list, year, vi)
+            elif m == 4 or m == 6 or m == 9 or m == 11:
+                m_raster_list = raster_list[doy : (doy + 30)]
+                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                out_file      = os.path.join(output_dir, out_name)
+                doy           = doy + 30
+                print(m_raster_list[0], m_raster_list[-1])
+                create_nc_obj(out_file, interval, m_raster_list, year, vi)
+            elif m == 2:
+                if len(raster_list) == 365:
+                    m_raster_list = raster_list[doy : (doy + 28)]
+                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                    out_file      = os.path.join(output_dir, out_name)
+                    doy           = doy + 28
+                    print('Feb was not a leap year for ' + str(year))
+                    print(m_raster_list[0], m_raster_list[-1])
+                    create_nc_obj(out_file, interval, m_raster_list, year, vi)
+                if len(raster_list) == 366:
+                    m_raster_list = raster_list[doy : (doy + 29)]
+                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                    out_file      = os.path.join(output_dir, out_name)
+                    doy           = doy + 29
+                    print('Feb was a leap year for ' + str(year))
+                    print(m_raster_list[0], m_raster_list[-1])                    
+                    create_nc_obj(out_file, interval, m_raster_list, year, vi)
+
 
 for v in range(len(vi_list)):          
     i_dir = os.path.join(input_dir, vi_list[v])
@@ -174,10 +221,7 @@ for v in range(len(vi_list)):
 
     for i in range(len(year_list)): # filter dirs by the year list
         if str(year_list[i]) in sub_dirs[i]:
-            filtered_dirs.append(sub_dirs[i]) 
-               
+            filtered_dirs.append(sub_dirs[i])
+
     for j in range(len(filtered_dirs)):
         tiff_to_netcdf(filtered_dirs[j], output_dir, output_name, vi_list[v], interval, res, year_list[j])
-    
-
-
