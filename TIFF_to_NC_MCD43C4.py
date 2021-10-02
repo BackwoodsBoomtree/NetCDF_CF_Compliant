@@ -22,37 +22,45 @@ output_dir  = '/mnt/g/MCD43C4/nc/Daily/0.05'
 output_name = 'MCD43C4.A'
 vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
 interval    = 'Daily' # must be 'Daily', '8-day', or 'Monthly
-res         = '0.05'
+res         = 0.05
+extent      = -180, 180, -90, 90
 year_list   = list(range(2018, 2020 + 1)) # Start and end year
 
-def create_nc_obj(output_name, interval, raster_list, year, vi):
+def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     # Create NetCDF file    
-    nco             = Dataset(output_name, 'w', clobber = True, format = "NETCDF4")
+    nco = Dataset(output_name, 'w', clobber = True, format = "NETCDF4")
     
-    # Meta-data
-    nco.Conventions = 'CF-1.9'
-    nco.title       = " ".join(['MCD43C4', vi, str(year), str(res + '-degrees')])
-    nco.institution = 'University of Oklahoma College of Atmospheric and Geographic Sciences'
-    nco.source      = 'Original data found at: https://e4ftl01.cr.usgs.gov/MOTA/MCD43C4.006/'
-    nco.references  = 'Schaaf, C., Wang, Z. (2015). MCD43C4 MODIS/Terra+Aqua BRDF/Albedo Nadir BRDF-Adjusted Ref Daily L3 Global 0.05Deg CMG V006 [Data set]. NASA EOSDIS Land Processes DAAC. Accessed 2021-09-25 from https://doi.org/10.5067/MODIS/MCD43C4.006'
-    nco.history     = """[2021-09-25] File created."""
-    nco.comment     = ('This data has been produced from the original 0.05-degree daily MCD43C4 files by Dr. Russell Doughty. ' + 
-                        'A strict snow filter of 0 was used to exclude data with any percentage of snow per Walther et al. (2016). ' +
-                        'Data flagged as 4 or 5 were excluded from the data as there was very little data for tropics when 3 was excluded. ' +
-                        'See the Readme.md at https://github.com/GeoCarb-OU/MCD43C4_VIs for more info on how this data was processed. ' +
-                        'Please cite Schaaf, C., Wang, Z. (2015) if you use this data in your project.')
-    
-    # Get shape, extent, coordinates from one of the input rasters
-    ds         = gdal.Open(raster_list[0])
-    a          = ds.ReadAsArray()
-    nlat, nlon = np.shape(a)
-    b          = ds.GetGeoTransform()  # bbox, interval
-    lon_list   = np.arange(nlon) * b[1] + b[0]
-    lat_list   = np.arange(nlat) * b[5] + b[3]
+    # Meta-data  
+    nco.LongName        = " ".join(['MCD43C4', interval, vi, str(year), str(str(res) + '-degrees')])
+    nco.ShortName       = "_".join(['MCD43C4', interval, vi, str(year), str(str(res) + '-degrees')])
+    nco.GranuleID       = os.path.basename(output_name)
+    nco.VersionID       = '1.0'
+    nco.Format          = 'NetCDF4'
+    nco.Conventions     = 'CF-1.9'
+    nco.ProcessingLevel = 'Level 4'
+    nco.Source          = 'MCD43C4 0.05-degree Daily product: https://e4ftl01.cr.usgs.gov/MOTA/MCD43C4.006/'
+    nco.ProcessingCenter     = 'University of Oklahoma College of Atmospheric and Geographic Sciences'
+    nco.ContactPersonName    = 'Doughty, Russell'
+    nco.ContactPersonRole    = 'Research Scientist'
+    nco.ContactPersonEmail   = 'russell.doughty@ou.edu'
+    nco.ContactPersonAddress = "GeoCarb Mission, University of Oklahoma, Norman, OK, 73019, USA";
+    nco.SouthernBoundingCoordinate = str(extent[2])
+    nco.NorthernBoundingCoordinate = str(extent[3])
+    nco.WesternBoundingCoordinate  = str(extent[0])
+    nco.EasternBoundingCoordinate  = str(extent[1])
+    nco.LatitudeResolution  = str(res)
+    nco.LongitudeResolution = str(res)
+    nco.ProductionDateTime  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    nco.comment     = ('A strict snow filter of 0 was used to exclude data with any percentage of snow per Walther et al. (2016). ' +
+                        'Data with a QC flag of 4 or 5 were excluded as there was very little data for tropics when 3 was excluded. ' +
+                        'See the Readme.md at https://github.com/GeoCarb-OU/MCD43C4_VIs for more info on how this data was processed.')
 
+    lon_list   = np.arange(extent[0], extent[1], res)
+    lat_list   = np.flip(np.arange(extent[2] + res, extent[3] + res, res))
+    
     # Create dimensions, variables and attributes
-    nco.createDimension('lon', nlon)
-    nco.createDimension('lat', nlat)
+    nco.createDimension('lon', len(lon_list))
+    nco.createDimension('lat', len(lat_list))
     nco.createDimension('time', None)
     
     # Time
@@ -84,11 +92,11 @@ def create_nc_obj(output_name, interval, raster_list, year, vi):
     crs.longitude_of_prime_meridian = 0.0
     crs.semi_major_axis             = 6378137.0
     crs.inverse_flattening          = 298.257223563
-    crs:crs_wtk                     = 'GEOGCRS["WGS 84", DATUM["World Geodetic System 1984", ELLIPSOID["WGS 84",6378137,298.257223563, LENGTHUNIT["metre",1]]], PRIMEM["Greenwich",0, ANGLEUNIT["degree",0.0174532925199433]], CS[ellipsoidal,2], AXIS["geodetic latitude (Lat)",north, ORDER[1], ANGLEUNIT["degree",0.0174532925199433]], AXIS["geodetic longitude (Lon)",east, ORDER[2], ANGLEUNIT["degree",0.0174532925199433]], ID["EPSG",4326]]'
+    crs.crs_wtk                     = 'GEOGCRS["WGS 84", DATUM["World Geodetic System 1984", ELLIPSOID["WGS 84",6378137,298.257223563, LENGTHUNIT["metre",1]]], PRIMEM["Greenwich",0, ANGLEUNIT["degree",0.0174532925199433]], CS[ellipsoidal,2], AXIS["geodetic latitude (Lat)",north, ORDER[1], ANGLEUNIT["degree",0.0174532925199433]], AXIS["geodetic longitude (Lon)",east, ORDER[2], ANGLEUNIT["degree",0.0174532925199433]], ID["EPSG",4326]]'
     
     # Variable
     var = nco.createVariable(vi, 'i4', ('time', 'lat', 'lon'), zlib = True, fill_value = -9999)
-    var.long_name    = " ".join(['MCD43C4', vi, str(year), str(res + '-degrees')])
+    var.long_name    = " ".join(['MCD43C4', vi, str(year), str(str(res) + '-degrees')])
     var.units        = 'Index'
     var.scale_factor = 0.0001
     var.add_offset   = 0.0
@@ -144,7 +152,7 @@ def create_nc_obj(output_name, interval, raster_list, year, vi):
             array = layer.ReadAsArray()  # data
             var[i, :, :] = array
         nco.close()
-        print('I have created the file: %s\n' % output_name)    
+        print('I have created the file: %s\n' % output_name)
         
 
 def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
@@ -174,44 +182,44 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
     # 8-day and Monthly TIFs are placed into a single nc file for the year,
     # and daily tifs are placed into monthly nc files
     if interval == '8-day' or interval == 'Monthly':
-        out_name    = ".".join([output_name, str(year), vi, interval, res, 'nc'])
+        out_name    = ".".join([output_name, str(year), vi, interval, str(res), 'nc'])
         out_file    = os.path.join(output_dir, out_name)
-        create_nc_obj(out_file, interval, raster_list, year, vi)
+        create_nc_obj(raster_list, out_file, vi, interval, res, extent, year)
         
     elif interval == 'Daily':
         doy = 0
         for m in list(range(1, 13)):
             if m == 1 or m == 3 or m ==5 or m == 7 or m == 8 or m == 10 or m == 12:
                 m_raster_list = raster_list[doy : (doy + 31)]
-                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, str(res), 'nc'])
                 out_file      = os.path.join(output_dir, out_name)
                 doy           = doy + 31
                 print(m_raster_list[0], m_raster_list[-1])
-                create_nc_obj(out_file, interval, m_raster_list, year, vi)
+                create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
             elif m == 4 or m == 6 or m == 9 or m == 11:
                 m_raster_list = raster_list[doy : (doy + 30)]
-                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, str(res), 'nc'])
                 out_file      = os.path.join(output_dir, out_name)
                 doy           = doy + 30
                 print(m_raster_list[0], m_raster_list[-1])
-                create_nc_obj(out_file, interval, m_raster_list, year, vi)
+                create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
             elif m == 2:
                 if len(raster_list) == 365:
                     m_raster_list = raster_list[doy : (doy + 28)]
-                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, str(res), 'nc'])
                     out_file      = os.path.join(output_dir, out_name)
                     doy           = doy + 28
                     print('Feb was not a leap year for ' + str(year))
                     print(m_raster_list[0], m_raster_list[-1])
-                    create_nc_obj(out_file, interval, m_raster_list, year, vi)
+                    create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
                 if len(raster_list) == 366:
                     m_raster_list = raster_list[doy : (doy + 29)]
-                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, res, 'nc'])
+                    out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, str(res), 'nc'])
                     out_file      = os.path.join(output_dir, out_name)
                     doy           = doy + 29
                     print('Feb was a leap year for ' + str(year))
                     print(m_raster_list[0], m_raster_list[-1])                    
-                    create_nc_obj(out_file, interval, m_raster_list, year, vi)
+                    create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
 
 
 for v in range(len(vi_list)):          
