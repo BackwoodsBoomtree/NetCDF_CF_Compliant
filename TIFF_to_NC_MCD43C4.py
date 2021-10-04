@@ -17,12 +17,12 @@ from osgeo import gdal
 import numpy as np
 
 # Input arguments 
-input_dir   = '/mnt/g/MCD43C4/tif/Daily/0.05'
-output_dir  = '/mnt/g/MCD43C4/nc/Daily/0.05'
+input_dir   = '/mnt/g/MCD43C4/tif/8-day/0.20'
+output_dir  = '/mnt/g/MCD43C4/nc/8-day/0.20'
 output_name = 'MCD43C4.A'
 vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
-interval    = 'Daily' # must be 'Daily', '8-day', or 'Monthly
-res         = 0.05
+interval    = '8-day' # must be 'Daily', '8-day', or 'Monthly
+res         = 0.20
 extent      = -180, 180, -90, 90
 year_list   = list(range(2018, 2020 + 1)) # Start and end year
 
