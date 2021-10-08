@@ -17,22 +17,27 @@ from osgeo import gdal
 import numpy as np
 
 # Input arguments 
-input_dir   = '/mnt/g/MCD43C4/tif/8-day/0.20'
-output_dir  = '/mnt/g/MCD43C4/nc/8-day/0.20'
+input_dir   = '/mnt/g/MCD43C4/tif/8-day/0.05'
+output_dir  = '/mnt/g/MCD43C4/nc/8-day/0.05'
 output_name = 'MCD43C4.A'
 vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
 interval    = '8-day' # must be 'Daily', '8-day', or 'Monthly
-res         = 0.20
+res         = 0.05
 extent      = -180, 180, -90, 90
 year_list   = list(range(2018, 2020 + 1)) # Start and end year
 
 def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
+    
+    # Get geo info from input rasters that will be put into output nc file
+    ds = gdal.Open(raster_list[0])
+    ds_crs = ds.GetProjection()
+    
     # Create NetCDF file    
-    nco = Dataset(output_name, 'w', clobber = True, format = "NETCDF4")
+    nco = Dataset(output_name, 'w', format = "NETCDF4")
     
     # Meta-data  
-    nco.LongName        = " ".join(['MCD43C4', interval, vi, str(year), str(str(res) + '-degrees')])
-    nco.ShortName       = "_".join(['MCD43C4', interval, vi, str(year), str(str(res) + '-degrees')])
+    nco.LongName        = " ".join(['MCD43C4', interval, vi, str(year)])
+    nco.ShortName       = "_".join(['MCD43C4', interval, vi, str(year)])
     nco.GranuleID       = os.path.basename(output_name)
     nco.VersionID       = '1.0'
     nco.Format          = 'NetCDF4'
@@ -55,8 +60,9 @@ def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
                         'Data with a QC flag of 4 or 5 were excluded as there was very little data for tropics when 3 was excluded. ' +
                         'See the Readme.md at https://github.com/GeoCarb-OU/MCD43C4_VIs for more info on how this data was processed.')
 
-    lon_list   = np.arange(extent[0], extent[1], res)
-    lat_list   = np.flip(np.arange(extent[2] + res, extent[3] + res, res))
+    # These need to be coordinates of the center of the gridcells
+    lon_list   = np.arange(extent[0] + (res / 2), extent[1], res)
+    lat_list   = np.flip(np.arange(extent[2] + (res / 2), extent[3], res))
     
     # Create dimensions, variables and attributes
     nco.createDimension('lon', len(lon_list))
@@ -69,11 +75,11 @@ def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     time.calendar      = 'gregorian'
     time.units         = 'days since %s-01-01' % str(year)
     if interval == 'Daily':
-        dates              = [datetime(year, 1, 1) + n * timedelta(days = 1) for n in range(len(raster_list))] # list of dates    
+        dates = [datetime(year, 1, 1) + n * timedelta(days = 1) for n in range(len(raster_list))] # list of dates    
     if interval == '8-day':
-        dates              = [datetime(year, 1, 1) + n * timedelta(days = 8) for n in range(0, 46)] # list of dates
+        dates = [datetime(year, 1, 1) + n * timedelta(days = 8) for n in range(0, 46)] # list of dates
     if interval == 'Monthly':
-        dates              = [datetime(year, 1, 1) + relativedelta(month = n) for n in range(1, 13)] # list of dates    
+        dates = [datetime(year, 1, 1) + relativedelta(month = n) for n in range(1, 13)] # list of dates    
     
     # Lon
     lon               = nco.createVariable('lon', 'f4', ('lon',))
@@ -86,21 +92,21 @@ def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     lat.units         = 'degrees_north'
 
     # CRS - These values pulled from gdalinfo after converting GeoTiffs to WGS84
-    crs                             = nco.createVariable('crs', 'i4')
+    crs                             = nco.createVariable('WGS84', 'i4')
     crs.long_name                   = 'World Geodetic System 1984 (WGS84)'
     crs.grid_mapping_name           = 'latitude_longitude'
     crs.longitude_of_prime_meridian = 0.0
     crs.semi_major_axis             = 6378137.0
     crs.inverse_flattening          = 298.257223563
-    crs.crs_wtk                     = 'GEOGCRS["WGS 84", DATUM["World Geodetic System 1984", ELLIPSOID["WGS 84",6378137,298.257223563, LENGTHUNIT["metre",1]]], PRIMEM["Greenwich",0, ANGLEUNIT["degree",0.0174532925199433]], CS[ellipsoidal,2], AXIS["geodetic latitude (Lat)",north, ORDER[1], ANGLEUNIT["degree",0.0174532925199433]], AXIS["geodetic longitude (Lon)",east, ORDER[2], ANGLEUNIT["degree",0.0174532925199433]], ID["EPSG",4326]]'
+    crs.spatial_ref                 = ds_crs
     
     # Variable
     var = nco.createVariable(vi, 'i4', ('time', 'lat', 'lon'), zlib = True, fill_value = -9999)
-    var.long_name    = " ".join(['MCD43C4', vi, str(year), str(str(res) + '-degrees')])
+    var.long_name    = " ".join(['MCD43C4', vi, str(year)])
     var.units        = 'Index'
     var.scale_factor = 0.0001
     var.add_offset   = 0.0
-    var.grid_mapping = 'crs'
+    var.grid_mapping = 'WGS84'
     var.set_auto_maskandscale(False)
 
     # Write lon,lat
