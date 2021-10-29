@@ -20,11 +20,11 @@ import numpy as np
 input_dir   = '/mnt/g/MCD43C4/tif/Daily/0.05'
 output_dir  = '/mnt/g/MCD43C4/nc/Daily/0.05'
 output_name = 'MCD43C4.A'
-vi_list     = 'EVI', 'NDVI', 'NIRv', 'LSWI'
+vi_list     = ['LSWI']
 interval    = 'Daily' # must be 'Daily', '8-day', or 'Monthly
 res         = 0.05
 extent      = -180, 180, -90, 90
-year_list   = list(range(2000, 2000 + 1)) # Start and end year
+year_list   = list(range(2000, 2020 + 1)) # Start and end year
 
 def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     
@@ -74,6 +74,7 @@ def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     time.standard_name = 'time'
     time.calendar      = 'gregorian'
     time.units         = 'days since %s-01-01' % str(year)
+    
     if interval == 'Daily' or interval == '8-day': 
         dates = []
         for i in range(len(raster_list)):
@@ -115,45 +116,6 @@ def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     lon[:] = lon_list
     lat[:] = lat_list
 
-    # # Fill missing DOYs with dummy rasters for 2000 and 2001
-    # if year == 2000:
-    #     dummy             = gdal.Open(raster_list[0])
-    #     dummy             = dummy.ReadAsArray()
-    #     dummy[dummy > -1] = -9999
-        
-    #     for i in range(len(raster_list) + 7):
-    #         time[i] = date2num(dates[i], units = time.units, calendar = time.calendar) # netCDF4 function that translates datetime object into proper format for .nc
-    #         if i > 6:
-    #             layer = gdal.Open(raster_list[i - 7])
-    #             array = layer.ReadAsArray()  # data
-    #             var[i, :, :] = array
-    #         else:
-    #             var[i, :, :] = dummy
-    #     nco.close()
-    #     print('I have created the file: %s\n' % output_name)
-
-    # elif year == 2001:
-    #     dummy             = gdal.Open(raster_list[0])
-    #     dummy             = dummy.ReadAsArray()
-    #     dummy[dummy > -1] = -9999            
-        
-    #     for i in range(len(raster_list)+1):
-    #         time[i] = date2num(dates[i], units = time.units, calendar = time.calendar) # netCDF4 function that translates datetime object into proper format for .nc
-    #         if i == 22:
-    #             var[i, :, :] = dummy
-    #         elif i < 22:
-    #             layer = gdal.Open(raster_list[i])
-    #             array = layer.ReadAsArray()  # data
-    #             var[i, :, :] = array
-    #         elif i > 22:
-    #             layer = gdal.Open(raster_list[i - 1])
-    #             array = layer.ReadAsArray()  # data
-    #             var[i, :, :] = array
-    #     nco.close()
-    #     print('I have created the file: %s\n' % output_name)                    
-    
-    # else:
-    # For all years after 2001. Step through each raster for the year, writing time and data to NetCDF
     for i in range(len(raster_list)):
         time[i] = date2num(dates[i], units = time.units, calendar = time.calendar) # netCDF4 function that translates datetime object into proper format for .nc
         layer = gdal.Open(raster_list[i])
@@ -184,7 +146,7 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
             quit('ERROR: There should be 12 input rasters for the year ' + str(year) + ', but there are only ' + str(len(raster_list)) + '.')           
 
     # Printing for visual quality control
-    print('Packing up these ' + str(len(raster_list)) + ' rasters into the .nc file for the year ' + str(year) + ' , starting with:')
+    print('Packing up these ' + str(len(raster_list)) + ' rasters into .nc file(s) for the year ' + str(year) + ' , starting with:')
     print(raster_list[0])
 
     # 8-day and Monthly TIFs are placed into a single nc file for the year,
@@ -219,7 +181,7 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
                 print(m_raster_list[0], m_raster_list[-1])
                 create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
             elif m == 2:
-                if len(raster_list) == 365:
+                if len(raster_list) == 365 or year == 2001:
                     m_raster_list = raster_list[doy : (doy + 28)]
                     out_name      = ".".join([output_name, str(year), str(m).zfill(2), vi, interval, str(res), 'nc'])
                     out_file      = os.path.join(output_dir, out_name)
@@ -244,6 +206,10 @@ def tiff_to_netcdf(input_dir, output_dir, output_name, vi, interval, res, year):
                     print(m_raster_list[0], m_raster_list[-1])
                     create_nc_obj(m_raster_list, out_file, vi, interval, res, extent, year)
 
+print('Starting the run for ' + interval + ' data!')
+print('For the years: ' + str(year_list))
+print('This process is running for: ' + str(vi_list))
+print('')
 
 for v in range(len(vi_list)):          
     i_dir = os.path.join(input_dir, vi_list[v])
