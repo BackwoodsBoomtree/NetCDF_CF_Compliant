@@ -20,11 +20,11 @@ import numpy as np
 input_dir   = '/mnt/g/MCD43C4/tif/Daily/0.05'
 output_dir  = '/mnt/g/MCD43C4/nc/Daily/0.05'
 output_name = 'MCD43C4.A'
-vi_list     = ['LSWI']
+vi_list     = ['NDVI']
 interval    = 'Daily' # must be 'Daily', '8-day', or 'Monthly
 res         = 0.05
 extent      = -180, 180, -90, 90
-year_list   = list(range(2000, 2020 + 1)) # Start and end year
+year_list   = list(range(2001, 2001 + 1)) # Start and end year
 
 def create_nc_obj(raster_list, output_name, vi, interval, res, extent, year):
     
@@ -211,14 +211,15 @@ print('For the years: ' + str(year_list))
 print('This process is running for: ' + str(vi_list))
 print('')
 
-for v in range(len(vi_list)):          
-    i_dir = os.path.join(input_dir, vi_list[v])
+for i in range(len(vi_list)):          
+    i_dir         = os.path.join(input_dir, vi_list[i])
     sub_dirs      = [f.path for f in os.scandir(i_dir) if f.is_dir()] # Get subdirectories of input_dir
     filtered_dirs = []
 
-    for i in range(len(year_list)): # filter dirs by the year list
-        if str(year_list[i]) in sub_dirs[i]:
-            filtered_dirs.append(sub_dirs[i])
+    for j in range(len(year_list)): # filter dirs by the year list
+        for k in range(len(sub_dirs)):
+            if str(year_list[j]) in sub_dirs[k]:
+                filtered_dirs.append(sub_dirs[k])
 
-    for j in range(len(filtered_dirs)):
-        tiff_to_netcdf(filtered_dirs[j], output_dir, output_name, vi_list[v], interval, res, year_list[j])
+    for l in range(len(filtered_dirs)):
+        tiff_to_netcdf(filtered_dirs[l], output_dir, output_name, vi_list[i], interval, res, year_list[l])
